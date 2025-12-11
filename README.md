@@ -180,4 +180,12 @@ To contribute to this project:
 
 ## License
 
-This project is based on the OpenEPaperLink Home Assistant integration and follows the same licensing terms.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+
+This project is based on the [OpenEPaperLink Home Assistant integration](https://github.com/OpenEPaperLink/Home_Assistant_Integration) and uses components from that project under the Apache License 2.0.
+
+## Acknowledgments
+
+- Based on the OpenEPaperLink Home Assistant integration
+- Supports ATC and OEPL firmware protocols
+- Uses BLE communication libraries from the Home Assistant ecosystem

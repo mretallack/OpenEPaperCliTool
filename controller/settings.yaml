@@ -1,0 +1,17 @@
+# MQTT Controller Settings
+mqtt:
+  broker: "mqtt.retallack.org.uk"
+  port: 1883
+  username: ""  # Optional
+  password: ""  # Optional
+  topic: "eink/display/update"
+  
+# CLI Tool Configuration
+cli:
+  command: "python3 -m eink_cli.cli"
+  working_directory: "../clitool"
+  
+# File paths
+files:
+  template: "template.yaml"
+  output: "device.yaml"

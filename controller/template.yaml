@@ -1,0 +1,30 @@
+# Template configuration with placeholders
+device:
+  mac_address: "{mac_address}"
+  protocol: "{protocol}"
+
+display:
+  background: "white"
+  rotate: 0
+
+content:
+  - type: "text"
+    text: "{title}"
+    x: 10
+    y: 10
+    font_size: 24
+    color: "black"
+    
+  - type: "text"
+    text: "{message}"
+    x: 10
+    y: 50
+    font_size: 16
+    color: "red"
+    
+  - type: "text"
+    text: "Updated: {timestamp}"
+    x: 10
+    y: 100
+    font_size: 12
+    color: "black"

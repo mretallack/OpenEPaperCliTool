@@ -31,9 +31,9 @@ class ImageGenerator:
         """
         width = device_info['width']
         height = device_info['height']
-        color_scheme = device_info.get('color_scheme', 'bw')
+        color_scheme_int = device_info.get('color_scheme', 0)
         
-        _LOGGER.debug(f"Generating {width}x{height} image for {color_scheme} display")
+        _LOGGER.debug(f"Generating {width}x{height} image for color_scheme={color_scheme_int} display")
         
         # Get display settings
         display_config = config.get('display', {})
@@ -43,9 +43,9 @@ class ImageGenerator:
         # Create base image
         if rotate in (90, 270):
             # Swap dimensions for rotation
-            img = Image.new('RGB', (height, width), color=self._get_color(background, color_scheme))
+            img = Image.new('RGB', (height, width), color=self._get_color(background, color_scheme_int))
         else:
-            img = Image.new('RGB', (width, height), color=self._get_color(background, color_scheme))
+            img = Image.new('RGB', (width, height), color=self._get_color(background, color_scheme_int))
         
         draw = ImageDraw.Draw(img)
         
@@ -53,7 +53,7 @@ class ImageGenerator:
         content = config.get('content', [])
         for element in content:
             try:
-                await self._draw_element(draw, element, color_scheme, img.size)
+                await self._draw_element(draw, element, color_scheme_int, img.size)
             except Exception as e:
                 _LOGGER.error(f"Error drawing element {element.get('type', 'unknown')}: {e}")
                 continue
@@ -62,13 +62,17 @@ class ImageGenerator:
         if rotate:
             img = img.rotate(-rotate, expand=True)  # PIL rotates counter-clockwise
         
+        # Process image for device (quantize colors and apply dithering)
+        from .ble.image_processing import process_image_for_device
+        processed_img = process_image_for_device(img, color_scheme_int, dither=2)
+        
         # Convert to JPEG
         img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format='JPEG', quality=95)
+        processed_img.save(img_byte_arr, format='JPEG', quality=95)
         return img_byte_arr.getvalue()
     
     async def _draw_element(self, draw: ImageDraw.Draw, element: Dict[str, Any], 
-                          color_scheme: str, img_size: Tuple[int, int]) -> None:
+                          color_scheme: int, img_size: Tuple[int, int]) -> None:
         """Draw a single element on the image.
         
         Args:
@@ -89,7 +93,7 @@ class ImageGenerator:
             _LOGGER.warning(f"Unknown element type: {element_type}")
     
     async def _draw_text(self, draw: ImageDraw.Draw, element: Dict[str, Any], 
-                        color_scheme: str, img_size: Tuple[int, int]) -> None:
+                        color_scheme: int, img_size: Tuple[int, int]) -> None:
         """Draw text element."""
         text = element['text']
         x = element['x']
@@ -107,7 +111,7 @@ class ImageGenerator:
         # Draw text
         draw.text((x, y), text, fill=color, font=font, anchor=pil_anchor)
     
-    def _draw_rectangle(self, draw: ImageDraw.Draw, element: Dict[str, Any], color_scheme: str) -> None:
+    def _draw_rectangle(self, draw: ImageDraw.Draw, element: Dict[str, Any], color_scheme: int) -> None:
         """Draw rectangle element."""
         x = element['x']
         y = element['y']
@@ -123,7 +127,7 @@ class ImageGenerator:
         else:
             draw.rectangle(coords, outline=color, width=1)
     
-    def _draw_line(self, draw: ImageDraw.Draw, element: Dict[str, Any], color_scheme: str) -> None:
+    def _draw_line(self, draw: ImageDraw.Draw, element: Dict[str, Any], color_scheme: int) -> None:
         """Draw line element."""
         x1 = element['x1']
         y1 = element['y1']
@@ -134,12 +138,12 @@ class ImageGenerator:
         
         draw.line([(x1, y1), (x2, y2)], fill=color, width=width)
     
-    def _get_color(self, color_name: str, color_scheme: str) -> Tuple[int, int, int]:
+    def _get_color(self, color_name: str, color_scheme: int) -> Tuple[int, int, int]:
         """Get RGB color tuple for color name and scheme.
         
         Args:
             color_name: Color name ('black', 'white', 'red', 'yellow')
-            color_scheme: Device color scheme
+            color_scheme: Device color scheme (0=BW, 1=BWR, 2=BWY)
             
         Returns:
             RGB color tuple
@@ -153,13 +157,13 @@ class ImageGenerator:
         }
         
         # Validate color is supported by scheme
-        if color_scheme == 'bw' and color_name not in ['black', 'white']:
+        if color_scheme == 0 and color_name not in ['black', 'white']:
             _LOGGER.warning(f"Color '{color_name}' not supported in BW scheme, using black")
             color_name = 'black'
-        elif color_scheme == 'bwr' and color_name not in ['black', 'white', 'red']:
+        elif color_scheme == 1 and color_name not in ['black', 'white', 'red']:
             _LOGGER.warning(f"Color '{color_name}' not supported in BWR scheme, using black")
             color_name = 'black'
-        elif color_scheme == 'bwy' and color_name not in ['black', 'white', 'yellow']:
+        elif color_scheme == 2 and color_name not in ['black', 'white', 'yellow']:
             _LOGGER.warning(f"Color '{color_name}' not supported in BWY scheme, using black")
             color_name = 'black'
         

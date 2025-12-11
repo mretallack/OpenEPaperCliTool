@@ -1,0 +1,7 @@
+{
+  "mac_address": "74:C8:C6:CB:05:72",
+  "protocol": "atc",
+  "title": "MQTT Test",
+  "message": "Controller Working!",
+  "timestamp": "2024-12-11 15:45:00"
+}

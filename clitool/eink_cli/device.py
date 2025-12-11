@@ -133,7 +133,7 @@ class DeviceManager:
                     'height': capabilities.height,
                     'color_scheme': capabilities.color_scheme,
                     'hw_type': 0,  # Default hw_type for CLI tool
-                    'rotatebuffer': 0  # No rotation for CLI tool
+                    'rotatebuffer': capabilities.rotatebuffer  # Use device's rotation requirement
                 })
                 
                 # Create uploader and upload image

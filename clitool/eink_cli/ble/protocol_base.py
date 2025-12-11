@@ -26,7 +26,7 @@ class DeviceCapabilities:
     width: int
     height: int
     color_scheme: int  # 0=MONO, 1=BWR, 2=BWY, 3=BWRY, 4=BWGBRY, 5=GRAYSCALE
-    rotatebuffer: int
+    rotatebuffer: int  # 0=no rotation, 1=90° rotation needed
 
 
 class BLEProtocol(ABC):
