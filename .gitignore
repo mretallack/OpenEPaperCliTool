@@ -17,3 +17,5 @@ clitool/eink_cli/ble/__pycache__/protocol_base.cpython-312.pyc
 clitool/eink_cli/ble/__pycache__/protocol_oepl.cpython-312.pyc
 clitool/eink_cli/ble/__pycache__/protocols.cpython-312.pyc
 clitool/eink_cli/ble/__pycache__/tlv_parser.cpython-312.pyc
+controller/__pycache__/mqtt_controller.cpython-312.pyc
+controller/device.yaml

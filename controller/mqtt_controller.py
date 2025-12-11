@@ -4,13 +4,18 @@
 import json
 import logging
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, Any
 
 import paho.mqtt.client as mqtt
 import yaml
+
+# Add clitool to path for importing
+sys.path.insert(0, '../clitool')
+from eink_cli.config import load_config
+from eink_cli.device import DeviceManager
+from eink_cli.imagegen import ImageGenerator
 
 
 class EInkController:
@@ -67,38 +72,45 @@ class EInkController:
         self.logger.info(f"Generated device config: {output_file}")
         return output_file
     
-    def _send_to_device(self, config_file: str) -> bool:
-        """Send configuration to device using CLI tool."""
-        cli_config = self.settings['cli']
-        command = cli_config['command']
-        working_dir = cli_config['working_directory']
-        
-        # Build command
-        cmd = f"{command} send {config_file}"
-        
+    async def _send_to_device(self, config_file: str) -> bool:
+        """Send configuration to device using CLI modules."""
         try:
-            self.logger.info(f"Executing: {cmd}")
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                cwd=working_dir,
-                capture_output=True,
-                text=True,
-                timeout=60
+            self.logger.info(f"Loading config: {config_file}")
+            config = load_config(Path(config_file))
+            
+            mac_address = config['device']['mac_address']
+            protocol = config['device'].get('protocol', 'auto')
+            
+            self.logger.info(f"Connecting to device {mac_address}...")
+            
+            # Initialize device manager and connect
+            device_manager = DeviceManager()
+            device_info = await device_manager.connect_device(
+                mac_address, 
+                protocol=protocol if protocol != 'auto' else None,
+                timeout=30
             )
             
-            if result.returncode == 0:
+            self.logger.info(f"Connected to {device_info['name']} ({device_info['protocol']})")
+            
+            # Generate image
+            self.logger.info("Generating image...")
+            image_gen = ImageGenerator()
+            image_data = await image_gen.generate_image(config, device_info)
+            
+            # Upload image
+            self.logger.info("Uploading image...")
+            success = await device_manager.upload_image(image_data, device_info)
+            
+            if success:
                 self.logger.info("Successfully sent to device")
                 return True
             else:
-                self.logger.error(f"CLI command failed: {result.stderr}")
+                self.logger.error("Failed to send image")
                 return False
                 
-        except subprocess.TimeoutExpired:
-            self.logger.error("CLI command timed out")
-            return False
         except Exception as e:
-            self.logger.error(f"Error executing CLI command: {e}")
+            self.logger.error(f"Error sending to device: {e}")
             return False
     
     def _on_connect(self, client, userdata, flags, rc):
@@ -132,7 +144,8 @@ class EInkController:
             config_file = self._write_device_config(config_content)
             
             # Send to device
-            success = self._send_to_device(config_file)
+            import asyncio
+            success = asyncio.run(self._send_to_device(config_file))
             
             if success:
                 self.logger.info("Display update completed successfully")
