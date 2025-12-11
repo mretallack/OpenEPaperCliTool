@@ -25,7 +25,7 @@ content:
     color: "black"
     
   - type: "text"
-    text: "Temp: {temperature}°C"
+    text: "Temperature: {temperature}°C"
     x: 10
     y: 55
     font_size: 14

@@ -26,6 +26,8 @@ class EInkController:
         self.settings = self._load_settings(settings_file)
         self.template = self._load_template()
         self.client = None
+        self.last_update_time = 0
+        self.min_update_interval = 30  # Minimum 30 seconds between updates
         
         # Setup logging
         logging.basicConfig(
@@ -126,6 +128,15 @@ class EInkController:
     def _on_message(self, client, userdata, msg):
         """Callback for MQTT message received."""
         try:
+            import time
+            
+            # Check cooldown period
+            current_time = time.time()
+            if current_time - self.last_update_time < self.min_update_interval:
+                remaining = self.min_update_interval - (current_time - self.last_update_time)
+                self.logger.info(f"Skipping update, cooldown active ({remaining:.1f}s remaining)")
+                return
+            
             topic = msg.topic
             payload = msg.payload.decode('utf-8')
             self.logger.info(f"Received message on {topic}: {payload}")
@@ -148,6 +159,7 @@ class EInkController:
             success = asyncio.run(self._send_to_device(config_file))
             
             if success:
+                self.last_update_time = current_time
                 self.logger.info("Display update completed successfully")
             else:
                 self.logger.error("Display update failed")

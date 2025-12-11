@@ -26,8 +26,6 @@ def publish_test_message():
     
     # Test message payload
     test_payload = {
-        "mac_address": "74:C8:C6:CB:05:72",
-        "protocol": "atc",
         "belle_battery": "85",
         "weather_condition": "Partly Cloudy", 
         "temperature": "22",
