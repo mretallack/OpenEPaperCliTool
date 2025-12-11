@@ -1,0 +1,94 @@
+# Status board with multiple sections
+device:
+  mac_address: "AA:BB:CC:DD:EE:FF"  # Replace with your device MAC
+  protocol: "oepl"
+
+display:
+  background: "white"
+  rotate: 0
+
+content:
+  # Header
+  - type: "rectangle"
+    x: 0
+    y: 0
+    width: 296
+    height: 25
+    color: "black"
+    filled: true
+    
+  - type: "text"
+    text: "System Status"
+    x: 10
+    y: 5
+    font_size: 16
+    color: "white"
+    
+  # Status indicators
+  - type: "text"
+    text: "CPU:"
+    x: 10
+    y: 35
+    font_size: 14
+    color: "black"
+    
+  - type: "rectangle"
+    x: 50
+    y: 35
+    width: 60
+    height: 15
+    color: "red"
+    filled: true
+    
+  - type: "text"
+    text: "85%"
+    x: 120
+    y: 37
+    font_size: 12
+    color: "black"
+    
+  - type: "text"
+    text: "Memory:"
+    x: 10
+    y: 55
+    font_size: 14
+    color: "black"
+    
+  - type: "rectangle"
+    x: 70
+    y: 55
+    width: 40
+    height: 15
+    color: "black"
+    filled: true
+    
+  - type: "text"
+    text: "42%"
+    x: 120
+    y: 57
+    font_size: 12
+    color: "black"
+    
+  # Network status
+  - type: "text"
+    text: "Network: Online"
+    x: 10
+    y: 80
+    font_size: 14
+    color: "black"
+    
+  # Timestamp
+  - type: "line"
+    x1: 0
+    y1: 100
+    x2: 296
+    y2: 100
+    color: "black"
+    width: 1
+    
+  - type: "text"
+    text: "Last updated: 14:30"
+    x: 10
+    y: 110
+    font_size: 12
+    color: "black"

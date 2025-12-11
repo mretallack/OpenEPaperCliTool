@@ -1,0 +1,58 @@
+# Weather display layout example
+device:
+  mac_address: "AA:BB:CC:DD:EE:FF"  # Replace with your device MAC
+  protocol: "oepl"
+
+display:
+  background: "white"
+  rotate: 0
+
+content:
+  # Title
+  - type: "text"
+    text: "Weather Today"
+    x: 10
+    y: 10
+    font_size: 20
+    color: "black"
+    
+  # Temperature
+  - type: "text"
+    text: "22°C"
+    x: 10
+    y: 40
+    font_size: 32
+    color: "red"
+    
+  # Condition
+  - type: "text"
+    text: "Sunny"
+    x: 80
+    y: 50
+    font_size: 16
+    color: "black"
+    
+  # Humidity box
+  - type: "rectangle"
+    x: 10
+    y: 80
+    width: 80
+    height: 30
+    color: "black"
+    filled: false
+    
+  - type: "text"
+    text: "Humidity: 65%"
+    x: 15
+    y: 90
+    font_size: 12
+    color: "black"
+    
+  # Separator line
+  - type: "line"
+    x1: 0
+    y1: 75
+    x2: 296
+    y2: 75
+    color: "black"
+    width: 1

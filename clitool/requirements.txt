@@ -1,0 +1,16 @@
+# Core dependencies
+click>=8.0.0
+PyYAML>=6.0
+Pillow>=10.4.0
+numpy>=1.26.4
+
+# BLE communication
+bleak>=1.0.1
+bleak-retry-connector>=3.4.0
+
+# Image processing and generation
+qrcode[pil]==7.4.2
+python-resize-image==1.1.20
+
+# Optional utilities
+colorlog>=6.7.0

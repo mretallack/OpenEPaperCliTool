@@ -1,0 +1,23 @@
+# Simple text display example
+device:
+  mac_address: "AA:BB:CC:DD:EE:FF"  # Replace with your device MAC
+  protocol: "oepl"                   # or "atc"
+
+display:
+  background: "white"
+  rotate: 0
+
+content:
+  - type: "text"
+    text: "Hello World!"
+    x: 10
+    y: 10
+    font_size: 24
+    color: "black"
+    
+  - type: "text"
+    text: "EInk CLI Tool"
+    x: 10
+    y: 50
+    font_size: 16
+    color: "red"
