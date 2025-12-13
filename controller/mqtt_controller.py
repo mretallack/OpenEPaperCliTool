@@ -90,7 +90,7 @@ class EInkController:
             device_info = await device_manager.connect_device(
                 mac_address, 
                 protocol=protocol if protocol != 'auto' else None,
-                timeout=30
+                timeout=60
             )
             
             self.logger.info(f"Connected to {device_info['name']} ({device_info['protocol']})")
