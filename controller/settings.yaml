@@ -14,6 +14,7 @@ cli:
 # Device settings
 device:
   max_retries: 5  # Number of upload retry attempts
+  ttl_seconds: 0  # Time to live in seconds (0 = no sleep)
   
 # File paths
 files:

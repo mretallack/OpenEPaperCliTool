@@ -29,6 +29,7 @@ class EInkController:
         self.last_update_time = 0
         self.min_update_interval = 30  # Minimum 30 seconds between updates
         self.max_retries = self.settings.get('device', {}).get('max_retries', 5)
+        self.ttl_seconds = self.settings.get('device', {}).get('ttl_seconds', 0)
         
         # Setup logging
         logging.basicConfig(
@@ -103,7 +104,7 @@ class EInkController:
             
             # Upload image with retries
             self.logger.info(f"Uploading image with retry (max {self.max_retries} attempts)...")
-            success = await device_manager.upload_image(image_data, device_info, max_retries=self.max_retries)
+            success = await device_manager.upload_image(image_data, device_info, max_retries=self.max_retries, ttl_seconds=self.ttl_seconds)
             
             if success:
                 self.logger.info("Successfully sent to device")

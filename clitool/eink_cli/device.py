@@ -100,7 +100,7 @@ class DeviceManager:
         except Exception as e:
             raise BLEConnectionError(f"Failed to connect to {mac_address}: {e}")
     
-    async def upload_image(self, image_data: bytes, device_info: Dict[str, Any], max_retries: int = 3) -> bool:
+    async def upload_image(self, image_data: bytes, device_info: Dict[str, Any], max_retries: int = 3, ttl_seconds: int = 0) -> bool:
         """Upload image to device with retry mechanism.
         
         Args:
@@ -155,7 +155,7 @@ class DeviceManager:
                     else:
                         # ATC uses block-based upload
                         success = await uploader.upload_image(
-                            image_data, metadata, protocol_type=protocol, dither=2
+                            image_data, metadata, protocol_type=protocol, dither=2, ttl_seconds=ttl_seconds
                         )
                     
                     if success:

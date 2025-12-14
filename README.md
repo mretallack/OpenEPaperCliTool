@@ -120,6 +120,7 @@ Options:
   --protocol PROTOCOL   Override protocol (oepl/atc)
   --timeout SECONDS     Connection timeout (default: 30)
   --retries NUMBER      Number of upload retry attempts (default: 3)
+  --ttl SECONDS         Time to live - how long device sleeps before next check-in (default: 0)
   --verbose            Enable verbose output
 ```
 

@@ -70,8 +70,9 @@ def discover(ctx, timeout):
 @click.option('--protocol', '-p', type=click.Choice(['oepl', 'atc']), help='Override protocol')
 @click.option('--timeout', '-t', default=30, help='Connection timeout in seconds')
 @click.option('--retries', '-r', default=3, help='Number of upload retry attempts')
+@click.option('--ttl', default=0, help='Time to live in seconds (0 = no sleep)')
 @click.pass_context
-def send(ctx, config_file, device, protocol, timeout, retries):
+def send(ctx, config_file, device, protocol, timeout, retries, ttl):
     """Send content to device using YAML configuration."""
     verbose = ctx.obj['verbose']
     
@@ -113,7 +114,7 @@ def send(ctx, config_file, device, protocol, timeout, retries):
             
             # Upload image
             click.echo(f"Uploading image (max {retries} retries)...")
-            success = await device_manager.upload_image(image_data, device_info, max_retries=retries)
+            success = await device_manager.upload_image(image_data, device_info, max_retries=retries, ttl_seconds=ttl)
             
             if success:
                 click.echo("✓ Image sent successfully!")

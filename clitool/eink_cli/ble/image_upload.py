@@ -565,7 +565,8 @@ class BLEImageUploader:
             image_data: bytes,
             metadata: BLEDeviceMetadata,
             protocol_type: str = "atc",
-            dither: int = 2
+            dither: int = 2,
+            ttl_seconds: int = 0
     ) -> bool:
         """Upload image using block-based protocol.
 
@@ -626,7 +627,7 @@ class BLEImageUploader:
 
             # Send data info to initiate upload
             data_info = _create_data_info(
-                255, zlib.crc32(self._img_array) & 0xFFFFFFF, self._img_array_len, data_type, 0, 0
+                255, zlib.crc32(self._img_array) & 0xFFFFFFF, self._img_array_len, data_type, 0, ttl_seconds
             )
             await self.connection._write_raw(bytes.fromhex(BLECommand.DATA_INFO.value) + data_info)
 
