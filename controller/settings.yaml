@@ -11,6 +11,10 @@ cli:
   command: "python3 -m eink_cli.cli"
   working_directory: "../clitool"
   
+# Device settings
+device:
+  max_retries: 5  # Number of upload retry attempts
+  
 # File paths
 files:
   template: "template.yaml"

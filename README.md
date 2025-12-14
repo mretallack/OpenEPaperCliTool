@@ -119,6 +119,7 @@ Options:
   --device MAC          Override device MAC address
   --protocol PROTOCOL   Override protocol (oepl/atc)
   --timeout SECONDS     Connection timeout (default: 30)
+  --retries NUMBER      Number of upload retry attempts (default: 3)
   --verbose            Enable verbose output
 ```
 
@@ -154,20 +155,46 @@ The available colors depend on your device's color scheme:
 
 ## Troubleshooting
 
-### Device Not Found
-- Ensure the device is powered on and in range
+### Connection Issues
+
+**Device Not Found / Connection Failed**
+- Ensure the device is powered on and in Bluetooth range (typically 10-30 feet)
 - Check that Bluetooth is enabled on your system
-- Verify the MAC address is correct
-
-### Connection Failed
-- Try increasing the timeout value
+- Verify the MAC address is correct (use `eink-cli discover` to find devices)
+- Try restarting Bluetooth on your system
+- Move closer to the device and try again
 - Ensure no other applications are connected to the device
-- Check that the device supports BLE connections
 
-### Image Not Displaying
+**"Device Disappeared" Errors**
+The tool now automatically retries connections with improved logic:
+- **6 connection attempts** with exponential backoff (1s, 2s, 4s, 8s, 16s delays)
+- **Fresh device scanning** between retry attempts
+- **Configurable upload retries** (default: 3 attempts)
+
+To increase retry attempts:
+```bash
+eink-cli send config.yaml --retries 5
+```
+
+**Intermittent Connection Issues**
+- BLE connections can be unreliable - the retry mechanism handles most issues automatically
+- If problems persist, try:
+  - Restarting the eink device
+  - Moving to a different location (away from WiFi routers, microwaves)
+  - Using `--verbose` flag to see detailed connection logs
+
+### Upload Issues
+
+**Upload Timeouts**
+- Large images may take longer - increase timeout: `--timeout 60`
+- The tool automatically retries failed uploads
+- OEPL devices use faster "direct write" protocol
+
+**Image Not Displaying**
 - Verify the content fits within the display dimensions
 - Check that colors are supported by the device
 - Ensure the protocol matches your device firmware
+- Try generating the image first: `eink-cli generate config.yaml -o test.png`
 
 ## Development
 

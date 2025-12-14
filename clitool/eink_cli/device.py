@@ -100,8 +100,8 @@ class DeviceManager:
         except Exception as e:
             raise BLEConnectionError(f"Failed to connect to {mac_address}: {e}")
     
-    async def upload_image(self, image_data: bytes, device_info: Dict[str, Any]) -> bool:
-        """Upload image to device.
+    async def upload_image(self, image_data: bytes, device_info: Dict[str, Any], max_retries: int = 3) -> bool:
+        """Upload image to device with retry mechanism.
         
         Args:
             image_data: JPEG image data
@@ -117,48 +117,69 @@ class DeviceManager:
         
         _LOGGER.info(f"Uploading image to {mac_address} ({len(image_data)} bytes)")
         
-        # Create new connection for upload
-        connection = BLEConnection(
-            mac_address=mac_address,
-            service_uuid=protocol_handler.service_uuid,
-            protocol=protocol_handler
-        )
+        max_upload_retries = max_retries
+        base_delay = 2.0
         
-        try:
-            async with connection:
-                # Create metadata object for upload
-                from .ble.metadata import BLEDeviceMetadata
-                metadata = BLEDeviceMetadata({
-                    'width': capabilities.width,
-                    'height': capabilities.height,
-                    'color_scheme': capabilities.color_scheme,
-                    'hw_type': 0,  # Default hw_type for CLI tool
-                    'rotatebuffer': capabilities.rotatebuffer  # Use device's rotation requirement
-                })
+        for attempt in range(max_upload_retries):
+            try:
+                _LOGGER.debug(f"Upload attempt {attempt + 1}/{max_upload_retries} for {mac_address}")
                 
-                # Create uploader and upload image
-                from .ble.image_upload import BLEImageUploader
-                uploader = BLEImageUploader(connection, mac_address)
+                # Create new connection for upload
+                connection = BLEConnection(
+                    mac_address=mac_address,
+                    service_uuid=protocol_handler.service_uuid,
+                    protocol=protocol_handler
+                )
                 
-                # Use appropriate upload method based on protocol
-                if protocol == 'oepl':
-                    # OEPL supports direct write (faster)
-                    success = await uploader.upload_direct_write(
-                        image_data, metadata, compressed=True, dither=2
+                async with connection:
+                    # Create metadata object for upload
+                    from .ble.metadata import BLEDeviceMetadata
+                    metadata = BLEDeviceMetadata({
+                        'width': capabilities.width,
+                        'height': capabilities.height,
+                        'color_scheme': capabilities.color_scheme,
+                        'hw_type': 0,  # Default hw_type for CLI tool
+                        'rotatebuffer': capabilities.rotatebuffer  # Use device's rotation requirement
+                    })
+                    
+                    # Create uploader and upload image
+                    from .ble.image_upload import BLEImageUploader
+                    uploader = BLEImageUploader(connection, mac_address)
+                    
+                    # Use appropriate upload method based on protocol
+                    if protocol == 'oepl':
+                        # OEPL supports direct write (faster)
+                        success = await uploader.upload_direct_write(
+                            image_data, metadata, compressed=True, dither=2
+                        )
+                    else:
+                        # ATC uses block-based upload
+                        success = await uploader.upload_image(
+                            image_data, metadata, protocol_type=protocol, dither=2
+                        )
+                    
+                    if success:
+                        _LOGGER.info(f"Image uploaded successfully to {mac_address} on attempt {attempt + 1}")
+                        return True
+                    else:
+                        if attempt < max_upload_retries - 1:
+                            delay = base_delay * (attempt + 1)
+                            _LOGGER.warning(f"Upload failed, retrying in {delay:.1f}s...")
+                            await asyncio.sleep(delay)
+                        else:
+                            _LOGGER.error(f"Image upload failed to {mac_address} after {max_upload_retries} attempts")
+                            return False
+                        
+            except Exception as e:
+                if attempt < max_upload_retries - 1:
+                    delay = base_delay * (attempt + 1)
+                    _LOGGER.warning(
+                        f"Upload attempt {attempt + 1} failed for {mac_address}: {e}. "
+                        f"Retrying in {delay:.1f}s..."
                     )
+                    await asyncio.sleep(delay)
                 else:
-                    # ATC uses block-based upload
-                    success = await uploader.upload_image(
-                        image_data, metadata, protocol_type=protocol, dither=2
-                    )
-                
-                if success:
-                    _LOGGER.info(f"Image uploaded successfully to {mac_address}")
-                else:
-                    _LOGGER.error(f"Image upload failed to {mac_address}")
-                
-                return success
-                
-        except Exception as e:
-            _LOGGER.error(f"Upload error for {mac_address}: {e}")
-            return False
+                    _LOGGER.error(f"Upload error for {mac_address} after {max_upload_retries} attempts: {e}")
+                    return False
+        
+        return False

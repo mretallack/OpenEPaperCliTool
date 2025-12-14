@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakError
-from bleak_retry_connector import establish_connection, BleakClientWithServiceCache
+from bleak_retry_connector import establish_connection, BleakClientWithServiceCache, BleakNotFoundError
 
 from .exceptions import BLEConnectionError, BLEProtocolError, BLETimeoutError
 
@@ -36,43 +36,85 @@ class BLEConnection:
         self._notification_active = False
     
     async def __aenter__(self):
-        """Establish BLE connection and initialize protocol."""
-        try:
-            # Find device
-            device = await BleakScanner.find_device_by_address(self.mac_address)
-            if not device:
-                raise BLEConnectionError(f"Device {self.mac_address} not found")
-            
-            # Establish connection
-            self.client = await establish_connection(
-                BleakClientWithServiceCache,
-                device,
-                f"CLI-{self.mac_address}",
-                self._disconnected_callback,
-                timeout=15.0,
-            )
-            
-            # Resolve characteristic
-            if not self._resolve_characteristic():
-                await self.client.disconnect()
-                raise BLEConnectionError(
-                    f"Could not resolve characteristic for service {self.service_uuid}"
+        """Establish BLE connection and initialize protocol with improved retry logic."""
+        max_retries = 6
+        base_delay = 1.0
+        
+        for attempt in range(max_retries):
+            try:
+                _LOGGER.debug(f"Connection attempt {attempt + 1}/{max_retries} for {self.mac_address}")
+                
+                # Find device with longer timeout on later attempts
+                scan_timeout = min(5.0 + attempt * 2.0, 15.0)
+                
+                # On retry attempts, do a fresh scan to handle "device disappeared" errors
+                if attempt > 0:
+                    _LOGGER.debug(f"Performing fresh device scan for {self.mac_address}...")
+                    # Clear any cached device info
+                    await asyncio.sleep(0.5)  # Brief pause before scanning
+                
+                device = await BleakScanner.find_device_by_address(self.mac_address, timeout=scan_timeout)
+                
+                if not device:
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)  # Exponential backoff
+                        _LOGGER.warning(f"Device {self.mac_address} not found, retrying in {delay:.1f}s...")
+                        await asyncio.sleep(delay)
+                        continue
+                    raise BLEConnectionError(f"Device {self.mac_address} not found after {max_retries} attempts")
+                
+                # Establish connection with retry-specific timeout
+                connection_timeout = min(10.0 + attempt * 5.0, 30.0)
+                self.client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    device,
+                    f"CLI-{self.mac_address}",
+                    self._disconnected_callback,
+                    timeout=connection_timeout,
+                    max_attempts=2,  # Reduce bleak_retry_connector attempts since we handle retries here
                 )
-            
-            # Enable notifications
-            await self.client.start_notify(self.write_char, self._notification_callback)
-            self._notification_active = True
-            
-            # Protocol initialization
-            await self.protocol.initialize_connection(self)
-            
-            return self
-            
-        except Exception as e:
-            await self._cleanup()
-            if isinstance(e, BLEConnectionError):
-                raise
-            raise BLEConnectionError(f"Failed to connect to {self.mac_address}: {e}")
+                
+                # Resolve characteristic
+                if not self._resolve_characteristic():
+                    await self.client.disconnect()
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        _LOGGER.warning(f"Could not resolve characteristic, retrying in {delay:.1f}s...")
+                        await asyncio.sleep(delay)
+                        continue
+                    raise BLEConnectionError(
+                        f"Could not resolve characteristic for service {self.service_uuid}"
+                    )
+                
+                # Enable notifications
+                await self.client.start_notify(self.write_char, self._notification_callback)
+                self._notification_active = True
+                
+                # Protocol initialization
+                await self.protocol.initialize_connection(self)
+                
+                _LOGGER.info(f"Successfully connected to {self.mac_address} on attempt {attempt + 1}")
+                return self
+                
+            except (BleakNotFoundError, BLEConnectionError, asyncio.TimeoutError) as e:
+                await self._cleanup()
+                
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                    _LOGGER.warning(
+                        f"Connection attempt {attempt + 1} failed for {self.mac_address}: {e}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    _LOGGER.error(f"All {max_retries} connection attempts failed for {self.mac_address}")
+                    raise BLEConnectionError(
+                        f"Failed to connect to {self.mac_address} after {max_retries} attempts: {e}"
+                    )
+            except Exception as e:
+                await self._cleanup()
+                _LOGGER.error(f"Unexpected error connecting to {self.mac_address}: {e}")
+                raise BLEConnectionError(f"Failed to connect to {self.mac_address}: {e}")
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Clean up BLE connection."""

@@ -28,6 +28,7 @@ class EInkController:
         self.client = None
         self.last_update_time = 0
         self.min_update_interval = 30  # Minimum 30 seconds between updates
+        self.max_retries = self.settings.get('device', {}).get('max_retries', 5)
         
         # Setup logging
         logging.basicConfig(
@@ -75,7 +76,7 @@ class EInkController:
         return output_file
     
     async def _send_to_device(self, config_file: str) -> bool:
-        """Send configuration to device using CLI modules."""
+        """Send configuration to device using CLI modules with retry."""
         try:
             self.logger.info(f"Loading config: {config_file}")
             config = load_config(Path(config_file))
@@ -100,15 +101,15 @@ class EInkController:
             image_gen = ImageGenerator()
             image_data = await image_gen.generate_image(config, device_info)
             
-            # Upload image
-            self.logger.info("Uploading image...")
-            success = await device_manager.upload_image(image_data, device_info)
+            # Upload image with retries
+            self.logger.info(f"Uploading image with retry (max {self.max_retries} attempts)...")
+            success = await device_manager.upload_image(image_data, device_info, max_retries=self.max_retries)
             
             if success:
                 self.logger.info("Successfully sent to device")
                 return True
             else:
-                self.logger.error("Failed to send image")
+                self.logger.error("Failed to send image after retries")
                 return False
                 
         except Exception as e:

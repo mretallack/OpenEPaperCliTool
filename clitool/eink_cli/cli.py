@@ -69,8 +69,9 @@ def discover(ctx, timeout):
 @click.option('--device', '-d', help='Override device MAC address')
 @click.option('--protocol', '-p', type=click.Choice(['oepl', 'atc']), help='Override protocol')
 @click.option('--timeout', '-t', default=30, help='Connection timeout in seconds')
+@click.option('--retries', '-r', default=3, help='Number of upload retry attempts')
 @click.pass_context
-def send(ctx, config_file, device, protocol, timeout):
+def send(ctx, config_file, device, protocol, timeout, retries):
     """Send content to device using YAML configuration."""
     verbose = ctx.obj['verbose']
     
@@ -111,17 +112,32 @@ def send(ctx, config_file, device, protocol, timeout):
             image_data = await image_gen.generate_image(config, device_info)
             
             # Upload image
-            click.echo("Uploading image...")
-            success = await device_manager.upload_image(image_data, device_info)
+            click.echo(f"Uploading image (max {retries} retries)...")
+            success = await device_manager.upload_image(image_data, device_info, max_retries=retries)
             
             if success:
                 click.echo("✓ Image sent successfully!")
             else:
-                click.echo("✗ Failed to send image", err=True)
+                click.echo("✗ Failed to send image after multiple attempts", err=True)
+                click.echo("Troubleshooting tips:", err=True)
+                click.echo("  • Ensure device is powered on and in range", err=True)
+                click.echo("  • Try moving closer to the device", err=True)
+                click.echo("  • Check that no other apps are connected to the device", err=True)
+                click.echo("  • Wait a moment and try again", err=True)
                 sys.exit(1)
                 
         except Exception as e:
-            click.echo(f"Error: {e}", err=True)
+            error_msg = str(e)
+            if "Failed to connect" in error_msg and "attempts" in error_msg:
+                click.echo(f"✗ Connection failed: {e}", err=True)
+                click.echo("Troubleshooting tips:", err=True)
+                click.echo("  • Ensure device is powered on and in Bluetooth range", err=True)
+                click.echo("  • Check the MAC address is correct", err=True)
+                click.echo("  • Try restarting Bluetooth on your system", err=True)
+                click.echo("  • Move closer to the device and try again", err=True)
+            else:
+                click.echo(f"Error: {e}", err=True)
+            
             if verbose:
                 import traceback
                 traceback.print_exc()
