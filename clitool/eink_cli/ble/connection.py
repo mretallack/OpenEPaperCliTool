@@ -45,7 +45,7 @@ class BLEConnection:
                 _LOGGER.debug(f"Connection attempt {attempt + 1}/{max_retries} for {self.mac_address}")
                 
                 # Find device with longer timeout on later attempts
-                scan_timeout = min(5.0 + attempt * 2.0, 15.0)
+                scan_timeout = min(60.0 + attempt * 2.0, 60.0)
                 
                 # On retry attempts, do a fresh scan to handle "device disappeared" errors
                 if attempt > 0:
