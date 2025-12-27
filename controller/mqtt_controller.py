@@ -5,6 +5,10 @@ import json
 import logging
 import os
 import sys
+import time
+
+import asyncio
+
 from pathlib import Path
 from typing import Dict, Any
 
@@ -128,6 +132,8 @@ class EInkController:
             self.logger.error(f"Failed to connect to MQTT broker: {rc}")
     
     def _on_message(self, client, userdata, msg):
+    
+        
         """Callback for MQTT message received."""
         try:
             import time
@@ -156,19 +162,24 @@ class EInkController:
             # Write device configuration
             config_file = self._write_device_config(config_content)
             
-            # Send to device
-            import asyncio
-            success = asyncio.run(self._send_to_device(config_file))
-            
-            if success:
-                self.last_update_time = current_time
-                self.logger.info("Display update completed successfully")
-            else:
-                self.logger.error("Display update failed")
+            # INSTEAD OF: asyncio.run(self._send_to_device(config_file))
+            # DO THIS (Start a thread so this function returns immediately):
+            import threading
+            threading.Thread(target=self._run_async_task, args=(config_file,)).start()
+        
                 
         except Exception as e:
             self.logger.error(f"Error processing message: {e}")
+
+
     
+    def _run_async_task(self, config_file):
+        """Helper to bridge thread to async without blocking MQTT."""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self._send_to_device(config_file))
+        loop.close()
+
     def _on_disconnect(self, client, userdata, rc):
         """Callback for MQTT disconnection."""
         self.logger.info("Disconnected from MQTT broker")
