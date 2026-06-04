@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import time
+import threading
 
 import asyncio
 
@@ -20,6 +21,7 @@ sys.path.insert(0, '../clitool')
 from eink_cli.config import load_config
 from eink_cli.device import DeviceManager
 from eink_cli.imagegen import ImageGenerator
+from eink_cli.ble import get_protocol_by_manufacturer_id, discover_devices
 
 
 class EInkController:
@@ -164,7 +166,6 @@ class EInkController:
             
             # INSTEAD OF: asyncio.run(self._send_to_device(config_file))
             # DO THIS (Start a thread so this function returns immediately):
-            import threading
             threading.Thread(target=self._run_async_task, args=(config_file,)).start()
         
                 
@@ -183,6 +184,51 @@ class EInkController:
     def _on_disconnect(self, client, userdata, rc):
         """Callback for MQTT disconnection."""
         self.logger.info("Disconnected from MQTT broker")
+
+    def _battery_publish_loop(self):
+        """Periodically scan for device and publish battery status."""
+        battery_config = self.settings.get('battery', {})
+        if not battery_config.get('enabled', False):
+            return
+
+        interval = battery_config.get('interval', 300)
+        topic = battery_config['topic']
+        mac_address = self.settings.get('device', {}).get('mac_address', '').upper()
+
+        self.logger.info(f"Battery publisher started: topic={topic}, interval={interval}s")
+
+        while True:
+            try:
+                loop = asyncio.new_event_loop()
+                devices = loop.run_until_complete(discover_devices(timeout=10))
+                loop.close()
+
+                for device in devices:
+                    if mac_address and device['mac_address'] != mac_address:
+                        continue
+                    adv_bytes = device.get('adv_data')
+                    mfg_id = device.get('manufacturer_id')
+                    if adv_bytes and mfg_id:
+                        protocol = get_protocol_by_manufacturer_id(mfg_id)
+                        adv = protocol.parse_advertising_data(adv_bytes)
+                        from datetime import datetime
+                        payload = json.dumps({
+                            "battery_pct": adv.battery_pct,
+                            "battery_mv": adv.battery_mv,
+                            "temperature": adv.temperature,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        if self.client:
+                            self.client.publish(topic, payload, retain=True)
+                            self.logger.info(f"Published battery: {adv.battery_pct}% ({adv.battery_mv}mV)")
+                        break
+                else:
+                    self.logger.warning(f"Device {mac_address} not found during battery scan")
+
+            except Exception as e:
+                self.logger.error(f"Battery publish error: {e}")
+
+            time.sleep(interval)
     
     def start(self):
         """Start the MQTT controller."""
@@ -210,6 +256,10 @@ class EInkController:
                 60
             )
             
+            # Start battery publisher thread
+            battery_thread = threading.Thread(target=self._battery_publish_loop, daemon=True)
+            battery_thread.start()
+
             # Start loop
             self.logger.info("Starting MQTT controller...")
             self.client.loop_forever()

@@ -11,6 +11,7 @@ import click
 from .config import load_config
 from .device import DeviceManager
 from .imagegen import ImageGenerator
+from .ble import get_protocol_by_manufacturer_id
 
 
 # Configure logging
@@ -51,6 +52,22 @@ def discover(ctx, timeout):
         click.echo(f"Found {len(devices)} device(s):")
         for device in devices:
             click.echo(f"  {device['mac_address']} - {device['name']} ({device['protocol']})")
+            
+            # Parse advertising data for status info
+            adv_bytes = device.get('adv_data')
+            mfg_id = device.get('manufacturer_id')
+            if adv_bytes and mfg_id:
+                try:
+                    protocol = get_protocol_by_manufacturer_id(mfg_id)
+                    adv = protocol.parse_advertising_data(adv_bytes)
+                    click.echo(f"    Battery: {adv.battery_pct}% ({adv.battery_mv} mV)")
+                    if adv.temperature is not None:
+                        click.echo(f"    Temperature: {adv.temperature}°C")
+                    click.echo(f"    Firmware: {adv.fw_version}")
+                    click.echo(f"    HW Type: 0x{adv.hw_type:04x}")
+                except (ValueError, Exception):
+                    pass
+            
             if verbose:
                 click.echo(f"    RSSI: {device.get('rssi', 'Unknown')} dBm")
                 click.echo(f"    Manufacturer ID: 0x{device.get('manufacturer_id', 0):04x}")

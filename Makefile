@@ -1,5 +1,5 @@
 
-PYTHON=python3.12
+PYTHON=python3.13
 
 send: venv/bin/activate
 	. venv/bin/activate && cd clitool && ${PYTHON} -m eink_cli.cli send test_device.yaml -t 30

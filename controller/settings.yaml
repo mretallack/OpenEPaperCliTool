@@ -13,8 +13,15 @@ cli:
   
 # Device settings
 device:
+  mac_address: "74:C8:C6:CB:05:72"
   max_retries: 5  # Number of upload retry attempts
   ttl_seconds: 0  # Time to live in seconds (0 = no sleep)
+
+# Battery status publishing
+battery:
+  enabled: true
+  topic: "eink/device/74:C8:C6:CB:05:72/battery"
+  interval: 43200  # Publish every 12 hours (seconds)
   
 # File paths
 files:
