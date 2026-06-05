@@ -6,11 +6,11 @@ mqtt:
   password: ""  # Optional
   topic: "eink/display/update"
   
-# CLI Tool Configuration
-cli:
-  command: "python3 -m eink_cli.cli"
-  working_directory: "../clitool"
-  
+# Home Assistant MQTT Discovery
+homeassistant:
+  discovery_prefix: "homeassistant"  # Default HA discovery prefix
+  device_name: "EInk Display"       # Name shown in HA device registry
+
 # Device settings
 device:
   mac_address: "74:C8:C6:CB:05:72"
@@ -20,7 +20,6 @@ device:
 # Battery status publishing
 battery:
   enabled: true
-  topic: "eink/device/74:C8:C6:CB:05:72/battery"
   interval: 43200  # Publish every 12 hours (seconds)
   
 # File paths

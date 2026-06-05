@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MQTT Controller for EInk Display Updates."""
+"""MQTT Controller for EInk Display Updates with Home Assistant MQTT Discovery."""
 
 import json
 import logging
@@ -37,6 +37,17 @@ class EInkController:
         self.max_retries = self.settings.get('device', {}).get('max_retries', 5)
         self.ttl_seconds = self.settings.get('device', {}).get('ttl_seconds', 0)
         
+        # BLE lock - prevents battery scan and display update from conflicting
+        self.ble_lock = threading.Lock()
+        
+        # HA Discovery settings
+        self.discovery_prefix = self.settings.get('homeassistant', {}).get('discovery_prefix', 'homeassistant')
+        self.mac_address = self.settings.get('device', {}).get('mac_address', '').upper()
+        self.device_id = self.mac_address.replace(':', '').lower()
+        self.state_topic = f"eink/{self.device_id}/state"
+        self.availability_topic = f"eink/{self.device_id}/availability"
+        self.command_topic = f"eink/{self.device_id}/refresh/set"
+        
         # Setup logging
         logging.basicConfig(
             level=logging.INFO,
@@ -50,10 +61,10 @@ class EInkController:
             with open(settings_file, 'r') as f:
                 return yaml.safe_load(f)
         except FileNotFoundError:
-            self.logger.error(f"Settings file {settings_file} not found")
+            print(f"Settings file {settings_file} not found")
             sys.exit(1)
         except yaml.YAMLError as e:
-            self.logger.error(f"Error parsing settings file: {e}")
+            print(f"Error parsing settings file: {e}")
             sys.exit(1)
     
     def _load_template(self) -> str:
@@ -63,8 +74,82 @@ class EInkController:
             with open(template_file, 'r') as f:
                 return f.read()
         except FileNotFoundError:
-            self.logger.error(f"Template file {template_file} not found")
+            print(f"Template file {template_file} not found")
             sys.exit(1)
+    
+    def _publish_ha_discovery(self):
+        """Publish Home Assistant MQTT auto-discovery config."""
+        device_name = self.settings.get('homeassistant', {}).get('device_name', 'EInk Display')
+        
+        discovery_payload = {
+            "dev": {
+                "ids": [self.device_id],
+                "name": device_name,
+                "mf": "OpenEPaperLink",
+                "mdl": "EInk BLE Display",
+                "sw": "1.0",
+                "connections": [["mac", self.mac_address]]
+            },
+            "o": {
+                "name": "eink-mqtt-controller",
+                "sw": "1.0",
+                "url": "https://github.com/OpenEPaperLink"
+            },
+            "cmps": {
+                "battery": {
+                    "p": "sensor",
+                    "name": "Battery",
+                    "device_class": "battery",
+                    "unit_of_measurement": "%",
+                    "state_topic": self.state_topic,
+                    "value_template": "{{ value_json.battery_pct }}",
+                    "unique_id": f"{self.device_id}_battery"
+                },
+                "battery_voltage": {
+                    "p": "sensor",
+                    "name": "Battery Voltage",
+                    "device_class": "voltage",
+                    "unit_of_measurement": "mV",
+                    "state_topic": self.state_topic,
+                    "value_template": "{{ value_json.battery_mv }}",
+                    "unique_id": f"{self.device_id}_battery_mv"
+                },
+                "temperature": {
+                    "p": "sensor",
+                    "name": "Temperature",
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                    "state_topic": self.state_topic,
+                    "value_template": "{{ value_json.temperature }}",
+                    "unique_id": f"{self.device_id}_temperature"
+                },
+                "last_update": {
+                    "p": "sensor",
+                    "name": "Last Update",
+                    "device_class": "timestamp",
+                    "state_topic": self.state_topic,
+                    "value_template": "{{ value_json.last_update }}",
+                    "unique_id": f"{self.device_id}_last_update"
+                },
+                "refresh": {
+                    "p": "button",
+                    "name": "Refresh Display",
+                    "command_topic": self.command_topic,
+                    "payload_press": "PRESS",
+                    "unique_id": f"{self.device_id}_refresh",
+                    "icon": "mdi:refresh"
+                }
+            },
+            "availability_topic": self.availability_topic,
+            "state_topic": self.state_topic
+        }
+        
+        topic = f"{self.discovery_prefix}/device/{self.device_id}/config"
+        self.client.publish(topic, json.dumps(discovery_payload), retain=True)
+        self.logger.info(f"Published HA discovery config to {topic}")
+        
+        # Mark device as online
+        self.client.publish(self.availability_topic, "online", retain=True)
     
     def _replace_placeholders(self, template: str, data: Dict[str, Any]) -> str:
         """Replace placeholders in template with data values."""
@@ -93,7 +178,6 @@ class EInkController:
             
             self.logger.info(f"Connecting to device {mac_address}...")
             
-            # Initialize device manager and connect
             device_manager = DeviceManager()
             device_info = await device_manager.connect_device(
                 mac_address, 
@@ -127,29 +211,52 @@ class EInkController:
         """Callback for MQTT connection."""
         if rc == 0:
             self.logger.info("Connected to MQTT broker")
+            
+            # Subscribe to HA status topic for re-discovery on HA restart
+            ha_status_topic = f"{self.discovery_prefix}/status"
+            client.subscribe(ha_status_topic)
+            self.logger.info(f"Subscribed to HA status: {ha_status_topic}")
+            
+            # Subscribe to data update topic
             topic = self.settings['mqtt']['topic']
             client.subscribe(topic)
-            self.logger.info(f"Subscribed to topic: {topic}")
+            self.logger.info(f"Subscribed to data topic: {topic}")
+            
+            # Subscribe to refresh button command topic
+            client.subscribe(self.command_topic)
+            self.logger.info(f"Subscribed to command topic: {self.command_topic}")
+            
+            # Publish discovery
+            self._publish_ha_discovery()
         else:
             self.logger.error(f"Failed to connect to MQTT broker: {rc}")
     
     def _on_message(self, client, userdata, msg):
-    
-        
         """Callback for MQTT message received."""
         try:
-            import time
+            topic = msg.topic
+            payload = msg.payload.decode('utf-8')
+            self.logger.info(f"Received message on {topic}: {payload}")
             
-            # Check cooldown period
+            # Handle HA birth message - re-publish discovery
+            ha_status_topic = f"{self.discovery_prefix}/status"
+            if topic == ha_status_topic and payload == "online":
+                self.logger.info("Home Assistant came online, re-publishing discovery")
+                self._publish_ha_discovery()
+                return
+            
+            # Handle refresh button press
+            if topic == self.command_topic:
+                self.logger.info("Refresh button pressed, triggering display update")
+                threading.Thread(target=self._run_async_send, args=(self.settings['files']['output'],)).start()
+                return
+            
+            # Handle data update message
             current_time = time.time()
             if current_time - self.last_update_time < self.min_update_interval:
                 remaining = self.min_update_interval - (current_time - self.last_update_time)
                 self.logger.info(f"Skipping update, cooldown active ({remaining:.1f}s remaining)")
                 return
-            
-            topic = msg.topic
-            payload = msg.payload.decode('utf-8')
-            self.logger.info(f"Received message on {topic}: {payload}")
             
             # Parse JSON payload
             try:
@@ -158,75 +265,90 @@ class EInkController:
                 self.logger.error("Invalid JSON in message payload")
                 return
             
+            self.last_update_time = current_time
+            
             # Replace placeholders in template
             config_content = self._replace_placeholders(self.template, data)
             
             # Write device configuration
             config_file = self._write_device_config(config_content)
             
-            # INSTEAD OF: asyncio.run(self._send_to_device(config_file))
-            # DO THIS (Start a thread so this function returns immediately):
-            threading.Thread(target=self._run_async_task, args=(config_file,)).start()
-        
+            # Send to device in a thread
+            threading.Thread(target=self._run_async_send, args=(config_file,)).start()
                 
         except Exception as e:
             self.logger.error(f"Error processing message: {e}")
 
-
-    
-    def _run_async_task(self, config_file):
+    def _run_async_send(self, config_file):
         """Helper to bridge thread to async without blocking MQTT."""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(self._send_to_device(config_file))
-        loop.close()
+        with self.ble_lock:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._send_to_device(config_file))
+            loop.close()
 
     def _on_disconnect(self, client, userdata, rc):
         """Callback for MQTT disconnection."""
         self.logger.info("Disconnected from MQTT broker")
 
     def _battery_publish_loop(self):
-        """Periodically scan for device and publish battery status."""
+        """Periodically scan for device and publish battery status via HA state topic."""
         battery_config = self.settings.get('battery', {})
         if not battery_config.get('enabled', False):
             return
 
         interval = battery_config.get('interval', 300)
-        topic = battery_config['topic']
-        mac_address = self.settings.get('device', {}).get('mac_address', '').upper()
+        max_retries = 3
+        initial_backoff = 20  # seconds
 
-        self.logger.info(f"Battery publisher started: topic={topic}, interval={interval}s")
+        self.logger.info(f"Battery publisher started: interval={interval}s")
 
         while True:
-            try:
-                loop = asyncio.new_event_loop()
-                devices = loop.run_until_complete(discover_devices(timeout=10))
-                loop.close()
+            success = False
+            for attempt in range(max_retries):
+                if not self.ble_lock.acquire(timeout=5):
+                    self.logger.info("BLE busy (display update in progress), skipping battery scan")
+                    break
+                try:
+                    loop = asyncio.new_event_loop()
+                    devices = loop.run_until_complete(discover_devices(timeout=10))
+                    loop.close()
 
-                for device in devices:
-                    if mac_address and device['mac_address'] != mac_address:
-                        continue
-                    adv_bytes = device.get('adv_data')
-                    mfg_id = device.get('manufacturer_id')
-                    if adv_bytes and mfg_id:
-                        protocol = get_protocol_by_manufacturer_id(mfg_id)
-                        adv = protocol.parse_advertising_data(adv_bytes)
-                        from datetime import datetime
-                        payload = json.dumps({
-                            "battery_pct": adv.battery_pct,
-                            "battery_mv": adv.battery_mv,
-                            "temperature": adv.temperature,
-                            "timestamp": datetime.now().isoformat()
-                        })
-                        if self.client:
-                            self.client.publish(topic, payload, retain=True)
-                            self.logger.info(f"Published battery: {adv.battery_pct}% ({adv.battery_mv}mV)")
-                        break
-                else:
-                    self.logger.warning(f"Device {mac_address} not found during battery scan")
+                    for device in devices:
+                        if self.mac_address and device['mac_address'] != self.mac_address:
+                            continue
+                        adv_bytes = device.get('adv_data')
+                        mfg_id = device.get('manufacturer_id')
+                        if adv_bytes and mfg_id:
+                            protocol = get_protocol_by_manufacturer_id(mfg_id)
+                            adv = protocol.parse_advertising_data(adv_bytes)
+                            from datetime import datetime, timezone
+                            state_payload = json.dumps({
+                                "battery_pct": adv.battery_pct,
+                                "battery_mv": adv.battery_mv,
+                                "temperature": adv.temperature,
+                                "last_update": datetime.now(timezone.utc).isoformat()
+                            })
+                            if self.client:
+                                self.client.publish(self.state_topic, state_payload, retain=True)
+                                self.logger.info(f"Published state: {adv.battery_pct}% ({adv.battery_mv}mV) {adv.temperature}°C")
+                            success = True
+                            break
 
-            except Exception as e:
-                self.logger.error(f"Battery publish error: {e}")
+                except Exception as e:
+                    self.logger.error(f"Battery scan error: {e}")
+                finally:
+                    self.ble_lock.release()
+
+                if success:
+                    break
+
+                backoff = initial_backoff * (2 ** attempt)
+                self.logger.warning(f"Device not found, retry {attempt + 1}/{max_retries} in {backoff}s")
+                time.sleep(backoff)
+
+            if not success:
+                self.logger.warning(f"Battery scan failed after {max_retries} attempts, will retry next interval")
 
             time.sleep(interval)
     
@@ -240,6 +362,9 @@ class EInkController:
         self.client.on_message = self._on_message
         self.client.on_disconnect = self._on_disconnect
         
+        # Set LWT so HA marks device offline if we disconnect
+        self.client.will_set(self.availability_topic, "offline", retain=True)
+        
         # Set credentials if provided
         if mqtt_config.get('username') and mqtt_config.get('password'):
             self.client.username_pw_set(
@@ -248,7 +373,6 @@ class EInkController:
             )
         
         try:
-            # Connect to broker
             self.logger.info(f"Connecting to MQTT broker: {mqtt_config['broker']}:{mqtt_config['port']}")
             self.client.connect(
                 mqtt_config['broker'], 
@@ -267,6 +391,7 @@ class EInkController:
         except KeyboardInterrupt:
             self.logger.info("Shutting down...")
             if self.client:
+                self.client.publish(self.availability_topic, "offline", retain=True)
                 self.client.disconnect()
         except Exception as e:
             self.logger.error(f"Error starting controller: {e}")
