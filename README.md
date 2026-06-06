@@ -217,3 +217,23 @@ This project is based on the [OpenEPaperLink Home Assistant integration](https:/
 - Based on the OpenEPaperLink Home Assistant integration
 - Supports ATC and OEPL firmware protocols
 - Uses BLE communication libraries from the Home Assistant ecosystem
+
+## Battery Percentage Calibration (WIP)
+
+⚠️ **Work in progress** — collecting data to determine accurate battery thresholds.
+
+The current percentage calculation uses a simple linear mapping (2.6V–3.2V = 0%–100%), which doesn't reflect real-world coin cell behaviour. Under load, voltage sags mean the device becomes unreliable well before 0%.
+
+### Observations
+
+| Date | Battery | Voltage (mV) | Reported % | Notes |
+|------|---------|-------------|-----------|-------|
+| 2026-06-04 | Old | 3024 | 70% | Working but intermittent. Removing/reinserting battery temporarily fixes. |
+| 2026-05-~28 | Old | ~3070 | ~78% | Started becoming unreliable around this point |
+| 2026-06-05 | New | 3056 | 75% | Fresh battery installed |
+
+### Goals
+
+- Determine the actual "needs replacing" voltage threshold
+- Track discharge curve over months to understand useful battery life
+- Potentially adjust the percentage calculation to match real-world reliability

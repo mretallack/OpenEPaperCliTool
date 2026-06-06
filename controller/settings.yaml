@@ -20,7 +20,7 @@ device:
 # Battery status publishing
 battery:
   enabled: true
-  interval: 43200  # Publish every 12 hours (seconds)
+  interval: 10800  # Publish every 3 hours (seconds)
   
 # File paths
 files:
