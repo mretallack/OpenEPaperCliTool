@@ -184,6 +184,16 @@ eink-cli send config.yaml --retries 5
   - Moving to a different location (away from WiFi routers, microwaves)
   - Using `--verbose` flag to see detailed connection logs
 
+### D-Bus Connection Loss (Long-Running Service)
+
+**Symptom**: All BLE operations fail with `[Errno 104] Connection reset by peer`. The error persists even after power-cycling the Bluetooth adapter. Only a service restart fixes it.
+
+**Cause**: This is a known BlueZ/D-Bus issue ([bleak #1471](https://github.com/hbldh/bleak/issues/1471)). Bleak uses a global D-Bus connection that persists for the process lifetime. When BlueZ or the D-Bus daemon drops this connection (which happens periodically in long-running services), the cached socket becomes permanently broken. Power-cycling the adapter doesn't help because the issue is the D-Bus socket, not the hardware.
+
+**Workaround**: The MQTT controller detects this error and exits immediately with `os._exit(1)`. Systemd's `Restart=always` brings the service back within 5 seconds with a fresh D-Bus connection. This is the same approach used by Home Assistant's Bluetooth integration.
+
+The systemd unit also includes `After=bluetooth.target` to avoid starting before BlueZ is ready.
+
 ### Upload Issues
 
 **Upload Timeouts**

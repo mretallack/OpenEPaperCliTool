@@ -24,6 +24,12 @@ from eink_cli.imagegen import ImageGenerator
 from eink_cli.ble import get_protocol_by_manufacturer_id, discover_devices
 
 
+def _is_dbus_connection_dead(exc: Exception) -> bool:
+    """Check if exception indicates a dead D-Bus connection (unrecoverable)."""
+    msg = str(exc)
+    return "Connection reset by peer" in msg or "Errno 104" in msg
+
+
 class EInkController:
     """MQTT controller for eink display updates."""
     
@@ -205,6 +211,9 @@ class EInkController:
                 
         except Exception as e:
             self.logger.error(f"Error sending to device: {e}")
+            if _is_dbus_connection_dead(e):
+                self.logger.critical("D-Bus connection lost, exiting for systemd restart")
+                os._exit(1)
             return False
     
     def _on_connect(self, client, userdata, flags, rc):
@@ -337,6 +346,9 @@ class EInkController:
 
                 except Exception as e:
                     self.logger.error(f"Battery scan error: {e}")
+                    if _is_dbus_connection_dead(e):
+                        self.logger.critical("D-Bus connection lost, exiting for systemd restart")
+                        os._exit(1)
                 finally:
                     self.ble_lock.release()
 
