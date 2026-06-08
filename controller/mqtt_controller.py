@@ -27,7 +27,13 @@ from eink_cli.ble import get_protocol_by_manufacturer_id, discover_devices
 def _is_dbus_connection_dead(exc: Exception) -> bool:
     """Check if exception indicates a dead D-Bus connection (unrecoverable)."""
     msg = str(exc)
-    return "Connection reset by peer" in msg or "Errno 104" in msg
+    return any(s in msg for s in (
+        "Connection reset by peer",
+        "Errno 104",
+        "Bad file descriptor",
+        "Errno 9",
+        "EOFError",
+    ))
 
 
 class EInkController:
